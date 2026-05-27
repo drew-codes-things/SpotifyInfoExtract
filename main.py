@@ -7,8 +7,6 @@ from spotipy.oauth2 import SpotifyClientCredentials
 
 load_dotenv()
 
-# ─── Auth ────────────────────────────────────────────────────────────────────
-
 CLIENT_ID     = os.getenv("SPOTIFY_CLIENT_ID") or os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET") or os.getenv("CLIENT_SECRET")
 
@@ -20,8 +18,6 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
 ))
-
-# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def ms_to_human(ms):
     total_s = ms // 1000
@@ -42,8 +38,6 @@ def extract_spotify_id(url_or_id, kind):
     return match.group(1) if match else url_or_id.strip()
 
 
-# ─── Album ───────────────────────────────────────────────────────────────────
-
 def search_albums(query, limit=5):
     results = sp.search(q=query, type="album", limit=limit)
     return results["albums"]["items"]
@@ -52,7 +46,6 @@ def search_albums(query, limit=5):
 def get_album_data(album_id):
     album  = sp.album(album_id)
     tracks = album["tracks"]["items"]
-    # Fetch full track objects for accurate durations
     total_ms = sum(t["duration_ms"] for t in tracks)
     return {
         "name":        album["name"],
@@ -100,12 +93,9 @@ def format_album(d):
     return "\n".join(lines)
 
 
-# ─── Playlist ────────────────────────────────────────────────────────────────
-
 def get_playlist_data(playlist_id):
     pl     = sp.playlist(playlist_id)
     items  = []
-    # Paginate through all tracks
     results = pl["tracks"]
     while results:
         for item in results["items"]:
@@ -159,8 +149,6 @@ def format_playlist(d):
     return "\n".join(lines)
 
 
-# ─── Artist ──────────────────────────────────────────────────────────────────
-
 def search_artists(query, limit=5):
     results = sp.search(q=query, type="artist", limit=limit)
     return results["artists"]["items"]
@@ -204,8 +192,6 @@ def format_artist(d):
         lines.append(f"  {date}  {name}")
     return "\n".join(lines)
 
-
-# ─── Main ────────────────────────────────────────────────────────────────────
 
 MODES = {
     "1": "Album search",
@@ -253,7 +239,6 @@ def main():
             if mode == "q":
                 break
 
-            # ── Album search ──
             if mode == "1":
                 query = input("  Search query: ").strip()
                 results = search_albums(query)
@@ -268,7 +253,6 @@ def main():
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
                     save(fname, content)
 
-            # ── Album by URL/ID ──
             elif mode == "2":
                 raw = input("  Album URL or ID: ").strip()
                 album_id = extract_spotify_id(raw, "album")
@@ -279,7 +263,6 @@ def main():
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
                     save(fname, content)
 
-            # ── Playlist by URL/ID ──
             elif mode == "3":
                 raw = input("  Playlist URL or ID: ").strip()
                 pl_id = extract_spotify_id(raw, "playlist")
@@ -291,7 +274,6 @@ def main():
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
                     save(fname, content)
 
-            # ── Artist search ──
             elif mode == "4":
                 query = input("  Artist name: ").strip()
                 results = search_artists(query)
