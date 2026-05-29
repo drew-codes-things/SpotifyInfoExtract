@@ -1,88 +1,80 @@
 # SpotifyInfoExtract
 
-A Python command-line tool that extracts detailed info from Spotify and saves it to a text file. Supports albums, playlists, and artists — search by name or paste a Spotify URL/ID directly.
+A robust Python CLI tool that extracts rich metadata from Spotify (albums, playlists, artists) using Spotipy and saves it as clean, formatted text files.
 
-Uses the [Spotipy](https://spotipy.readthedocs.io) library with Client Credentials flow — no user login required.
+## Technical Architecture
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+- **Library**: Spotipy (Spotify Web API wrapper)
+- **Auth**: Client Credentials flow (no user login required)
+- **Input Support**: Search by name **or** direct URL/ID paste
+- **Pagination**: Full support for large playlists via `sp.next()`
+- **Output**: Human-readable `.txt` files with consistent formatting
 
----
+## Key Functions (main.py)
 
-## Setup
+- `ms_to_human(ms)` — Converts milliseconds to readable duration (e.g. `6m 5s`)
+- `safe_filename(name)` — Sanitizes strings for safe filenames
+- `extract_spotify_id(url_or_id, kind)` — Regex-based ID extraction from URLs
+- `get_album_data(album_id)` — Full album + tracklist with total runtime
+- `get_playlist_data(playlist_id)` — Paginated track fetching + added dates
+- `get_artist_data(artist_id)` — Artist profile + top tracks + discography
+- `format_album / format_playlist / format_artist` — Structured text output
+- `main()` — Interactive menu with 4 modes + save option
 
-**Requirements:** Python 3.8+
+## Supported Modes
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Album search → select from results
+2. Album by URL/ID
+3. Playlist by URL/ID (supports very large playlists)
+4. Artist search → profile + top tracks + albums
 
-2. Copy `.env.example` to `.env` and fill in your credentials:
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Run:
-   ```bash
-   python main.py
-   ```
-
----
-
-## Getting Spotify API credentials
-
-1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Create an app (any name, any description)
-3. Copy the **Client ID** and **Client Secret** into your `.env`
-
-No redirect URI or user login is needed — this tool uses the Client Credentials flow which is entirely server-side.
-
----
-
-## What it extracts
-
-### Album (search or URL/ID)
-
-- Name, artist(s), release date, label, genres
-- Full tracklist with track number, duration, explicit flag, and 30-second preview URL
-- Total runtime
-- Album cover URL
-- Spotify link
-
-### Playlist (URL/ID)
-
-- Name, owner, description
-- Full paginated tracklist — works on playlists of any size
-- Per-track: name, artist(s), album, duration, explicit flag, date added
-- Total runtime
-
-### Artist (search)
-
-- Follower count, popularity score, genres
-- Top 10 tracks with duration and album name
-- Discography (album titles + release dates)
-
----
-
-## Output
-
-Each extraction prints to the terminal and optionally saves to a `.txt` file named after the album/playlist/artist.
-
-Example output filename: `Radiohead - OK Computer.txt`
-
----
-
-## Accepting URLs
-
-You can paste a full Spotify URL or just the ID for albums, playlists, and artists:
+## File Structure
 
 ```
-https://open.spotify.com/album/5Z9iiGl2FcIfa3BMiv6OIw
-5Z9iiGl2FcIfa3BMiv6OIw          ← both work
+SpotifyInfoExtract/
+├── main.py
+├── requirements.txt
+├── .env.example
+├── README.md
+└── LICENSE
 ```
 
----
+## Installation & Setup
+
+```bash
+git clone https://github.com/drew-codes-things/SpotifyInfoExtract.git
+cd SpotifyInfoExtract
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Edit `.env` with your Spotify Client ID + Secret (from Developer Dashboard).
+
+## Usage
+
+```bash
+python main.py
+```
+
+Follow the menu prompts. You can paste full Spotify URLs or just IDs.
+
+## Output Example
+
+```
+Album:    OK Computer
+Artist:   Radiohead
+Released: 1997-06-16
+...
+
+Tracklist
+------------------------------------------------------------
+ 1. Airbag                     (4m 44s)  — Radiohead
+```
+
+## Requirements
+
+- Python 3.8+
+- Spotify Developer App (Client Credentials)
 
 ## License
 
