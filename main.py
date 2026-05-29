@@ -68,7 +68,7 @@ def get_album_data(album_id):
         "release":      album["release_date"],
         "label":        album.get("label", "N/A"),
         "genres":       ", ".join(album.get("genres", [])) or "N/A",
-        "total_tracks": album["total_tracks"],
+        "total_tracks": len(tracks),
         "runtime":      ms_to_human(total_ms),
         "cover":        album["images"][0]["url"] if album["images"] else "",
         "spotify_url":  album["external_urls"]["spotify"],
