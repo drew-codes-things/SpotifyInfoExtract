@@ -39,16 +39,32 @@ SpotifyInfoExtract/
 └── LICENSE
 ```
 
-## Installation & Setup
+## Installation (Recommended: Virtual Environment)
+
+### On Linux / macOS
 
 ```bash
 git clone https://github.com/drew-codes-things/SpotifyInfoExtract.git
 cd SpotifyInfoExtract
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
 pip install -r requirements.txt
-cp .env.example .env
 ```
 
-Edit `.env` with your Spotify Client ID + Secret (from Developer Dashboard).
+### On Windows
+
+```bash
+git clone https://github.com/drew-codes-things/SpotifyInfoExtract.git
+cd SpotifyInfoExtract
+
+python -m venv venv
+venv\Scripts\activate
+
+pip install -r requirements.txt
+```
 
 ## Usage
 
