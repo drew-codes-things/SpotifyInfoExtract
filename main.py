@@ -43,10 +43,6 @@ def extract_spotify_id(url_or_id, kind):
     return match.group(1) if match else url_or_id.strip()
 
 
-# ---------------------------------------------------------------------------
-# Album
-# ---------------------------------------------------------------------------
-
 def search_albums(query, limit=5):
     results = sp.search(q=query, type="album", limit=limit)
     return results["albums"]["items"]
@@ -111,10 +107,6 @@ def format_album(d):
         lines.append(f"{t['number']:>2}. {t['name']}{explicit}  ({t['duration']}){SEP}{t['artists']}{preview}")
     return "\n".join(lines)
 
-
-# ---------------------------------------------------------------------------
-# Artist
-# ---------------------------------------------------------------------------
 
 def search_artists(query, limit=5):
     results = sp.search(q=query, type="artist", limit=limit)
@@ -182,10 +174,6 @@ def format_artist(d):
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Playlist
-# ---------------------------------------------------------------------------
-
 def search_playlists(query, limit=5):
     results = sp.search(q=query, type="playlist", limit=limit)
     return results["playlists"]["items"]
@@ -247,10 +235,6 @@ def format_playlist(d):
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Save helpers
-# ---------------------------------------------------------------------------
-
 MODES = {
     "1": "Album search",
     "2": "Album by URL/ID",
@@ -258,10 +242,6 @@ MODES = {
     "4": "Playlist search",
     "5": "Playlist by URL/ID",
 }
-
-# Data types that support structured CSV/JSON export.
-# Artist mode uses top_tracks as rows for CSV, and the full dict for JSON.
-_STRUCTURED_TYPES = {"album", "playlist", "artist"}
 
 
 def pick(prompt, options):
@@ -313,7 +293,6 @@ def save(base_name, content_txt, data_dict=None, data_type="album"):
 
     elif fmt == "csv":
         if data_dict is None:
-            # No structured data at all -- ask before falling back.
             ans = pick("  CSV is not available for this export. Save as txt instead? y/n: ", ["y", "n"])
             if ans == "n":
                 print("  Save cancelled.")
@@ -322,8 +301,7 @@ def save(base_name, content_txt, data_dict=None, data_type="album"):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content_txt)
         elif data_type == "artist":
-            # Use top_tracks as the CSV rows for artist exports.
-            rows   = data_dict.get("top_tracks", [])
+            rows = data_dict.get("top_tracks", [])
             if not rows:
                 print("  No top tracks available to export as CSV.")
                 return
@@ -333,8 +311,11 @@ def save(base_name, content_txt, data_dict=None, data_type="album"):
                 writer.writeheader()
                 writer.writerows(rows)
         else:
-            rows   = data_dict.get("tracks", [])
-            fields = list(rows[0].keys()) if rows else []
+            rows = data_dict.get("tracks", [])
+            if not rows:
+                print("  No tracks available to export as CSV.")
+                return
+            fields = list(rows[0].keys())
             with open(path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=fields)
                 writer.writeheader()
@@ -342,7 +323,6 @@ def save(base_name, content_txt, data_dict=None, data_type="album"):
 
     elif fmt == "json":
         if data_dict is None:
-            # No structured data -- ask before falling back.
             ans = pick("  JSON is not available for this export. Save as txt instead? y/n: ", ["y", "n"])
             if ans == "n":
                 print("  Save cancelled.")
@@ -356,10 +336,6 @@ def save(base_name, content_txt, data_dict=None, data_type="album"):
 
     print(f"  Saved to: {path}")
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     print("\n  Spotify Info Extractor")
