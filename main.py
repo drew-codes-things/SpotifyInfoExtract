@@ -1,6 +1,8 @@
 import os
 import sys
 import re
+import csv
+import json
 from dotenv import load_dotenv
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
@@ -19,6 +21,8 @@ sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
 ))
+
+SEP = " - "
 
 
 def ms_to_human(ms):
@@ -39,14 +43,28 @@ def extract_spotify_id(url_or_id, kind):
     return match.group(1) if match else url_or_id.strip()
 
 
+# ---------------------------------------------------------------------------
+# Album
+# ---------------------------------------------------------------------------
+
 def search_albums(query, limit=5):
     results = sp.search(q=query, type="album", limit=limit)
     return results["albums"]["items"]
 
 
+def get_album_tracks_paginated(album):
+    """Fetch ALL tracks for an album, following pagination for albums > 50 tracks."""
+    tracks = list(album["tracks"]["items"])
+    page   = album["tracks"]
+    while page["next"]:
+        page   = sp.next(page)
+        tracks.extend(page["items"])
+    return tracks
+
+
 def get_album_data(album_id):
     album    = sp.album(album_id)
-    tracks   = album["tracks"]["items"]
+    tracks   = get_album_tracks_paginated(album)
     total_ms = sum(t["duration_ms"] for t in tracks)
     return {
         "name":         album["name"],
@@ -90,9 +108,13 @@ def format_album(d):
     for t in d["tracks"]:
         explicit = " [E]" if t["explicit"] else ""
         preview  = f"  preview: {t['preview']}" if t["preview"] else ""
-        lines.append(f"{t['number']:>2}. {t['name']}{explicit}  ({t['duration']})  \u2014 {t['artists']}{preview}")
+        lines.append(f"{t['number']:>2}. {t['name']}{explicit}  ({t['duration']}){SEP}{t['artists']}{preview}")
     return "\n".join(lines)
 
+
+# ---------------------------------------------------------------------------
+# Artist
+# ---------------------------------------------------------------------------
 
 def search_artists(query, limit=5):
     results = sp.search(q=query, type="artist", limit=limit)
@@ -107,8 +129,7 @@ def get_artist_albums_paginated(artist_id, album_types):
         while results:
             all_albums.extend(results["items"])
             results = sp.next(results) if results["next"] else None
-    # De-duplicate by name (some albums appear in multiple markets)
-    seen = set()
+    seen   = set()
     unique = []
     for a in all_albums:
         key = (a["name"].lower(), a["release_date"])
@@ -120,7 +141,7 @@ def get_artist_albums_paginated(artist_id, album_types):
 
 
 def get_artist_data(artist_id, include_singles=False):
-    artist     = sp.artist(artist_id)
+    artist      = sp.artist(artist_id)
     album_types = ["album"]
     if include_singles:
         album_types += ["single", "compilation"]
@@ -154,17 +175,88 @@ def format_artist(d):
         "-" * 60,
     ]
     for i, t in enumerate(d["top_tracks"], 1):
-        lines.append(f"{i:>2}. {t['name']}  ({t['duration']})  \u2014 {t['album']}")
+        lines.append(f"{i:>2}. {t['name']}  ({t['duration']}){SEP}{t['album']}")
     lines += ["", "Discography", "-" * 60]
     for name, date, atype in d["albums"]:
         lines.append(f"  {date}  [{atype.upper()}]  {name}")
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Playlist
+# ---------------------------------------------------------------------------
+
+def search_playlists(query, limit=5):
+    results = sp.search(q=query, type="playlist", limit=limit)
+    return results["playlists"]["items"]
+
+
+def get_playlist_data(playlist_id):
+    playlist = sp.playlist(playlist_id)
+    tracks   = []
+    page     = playlist["tracks"]
+    while page:
+        for item in page["items"]:
+            t = item.get("track")
+            if not t or t["type"] != "track":
+                continue
+            tracks.append({
+                "number":   len(tracks) + 1,
+                "name":     t["name"],
+                "artists":  ", ".join(a["name"] for a in t["artists"]),
+                "album":    t["album"]["name"],
+                "duration": ms_to_human(t["duration_ms"]),
+                "explicit": t["explicit"],
+                "added_at": item.get("added_at", "")[:10],
+            })
+        page = sp.next(page) if page["next"] else None
+    owner = playlist.get("owner", {})
+    return {
+        "name":        playlist["name"],
+        "owner":       owner.get("display_name") or owner.get("id", "N/A"),
+        "description": playlist.get("description") or "N/A",
+        "total":       playlist["tracks"]["total"],
+        "public":      playlist.get("public"),
+        "url":         playlist["external_urls"]["spotify"],
+        "cover":       playlist["images"][0]["url"] if playlist.get("images") else "",
+        "tracks":      tracks,
+    }
+
+
+def format_playlist(d):
+    pub = {True: "Public", False: "Private", None: "Unknown"}.get(d["public"], "Unknown")
+    lines = [
+        f"Playlist:    {d['name']}",
+        f"Owner:       {d['owner']}",
+        f"Description: {d['description']}",
+        f"Tracks:      {d['total']}",
+        f"Visibility:  {pub}",
+        f"URL:         {d['url']}",
+        f"Cover:       {d['cover']}",
+        "",
+        "Tracklist",
+        "-" * 60,
+    ]
+    for t in d["tracks"]:
+        explicit = " [E]" if t["explicit"] else ""
+        added    = f"  added: {t['added_at']}" if t["added_at"] else ""
+        lines.append(
+            f"{t['number']:>3}. {t['name']}{explicit}  ({t['duration']})"
+            f"{SEP}{t['artists']}  [{t['album']}]{added}"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Save helpers
+# ---------------------------------------------------------------------------
+
 MODES = {
     "1": "Album search",
     "2": "Album by URL/ID",
     "3": "Artist search",
+    "4": "Playlist search",
+    "5": "Playlist by URL/ID",
 }
 
 
@@ -186,12 +278,56 @@ def choose_from_list(items, label_fn):
         print("  Invalid choice.")
 
 
-def save(filename, content):
-    path = os.path.join(BASE_DIR, filename)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+def ask_format():
+    """Ask the user which export format they want. Returns 'txt', 'csv', or 'json'."""
+    print("  Export format:")
+    print("    1. txt (plain text)")
+    print("    2. csv")
+    print("    3. json")
+    choice = pick("  Choice: ", ["1", "2", "3"])
+    return {"1": "txt", "2": "csv", "3": "json"}[choice]
+
+
+def save(base_name, content_txt, data_dict=None):
+    """Save content in the user-chosen format."""
+    fmt  = ask_format()
+    ext  = fmt
+    path = os.path.join(BASE_DIR, f"{base_name}.{ext}")
+
+    if fmt == "txt":
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content_txt)
+
+    elif fmt == "csv":
+        if data_dict is None:
+            print("  CSV not available for this mode, saving as txt instead.")
+            path = os.path.join(BASE_DIR, f"{base_name}.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content_txt)
+        else:
+            rows   = data_dict.get("tracks", [])
+            fields = list(rows[0].keys()) if rows else []
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(rows)
+
+    elif fmt == "json":
+        if data_dict is None:
+            print("  JSON not available for this mode, saving as txt instead.")
+            path = os.path.join(BASE_DIR, f"{base_name}.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content_txt)
+        else:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data_dict, f, indent=2, ensure_ascii=False)
+
     print(f"  Saved to: {path}")
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
     print("\n  Spotify Info Extractor")
@@ -213,13 +349,13 @@ def main():
                 if not results:
                     print("  No albums found."); continue
                 print()
-                album   = choose_from_list(results, lambda a: f"{a['name']}  \u2014  {a['artists'][0]['name']}  ({a['release_date'][:4]})")
+                album   = choose_from_list(results, lambda a: f"{a['name']}{SEP}{a['artists'][0]['name']}  ({a['release_date'][:4]})")
                 data    = get_album_data(album["id"])
                 content = format_album(data)
                 print("\n" + content)
-                fname   = safe_filename(f"{data['artists']} - {data['name']}") + ".txt"
+                fname   = safe_filename(f"{data['artists']} - {data['name']}")
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content)
+                    save(fname, content, data)
 
             elif mode == "2":
                 raw      = input("  Album URL or ID: ").strip()
@@ -227,9 +363,9 @@ def main():
                 data     = get_album_data(album_id)
                 content  = format_album(data)
                 print("\n" + content)
-                fname    = safe_filename(f"{data['artists']} - {data['name']}") + ".txt"
+                fname    = safe_filename(f"{data['artists']} - {data['name']}")
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content)
+                    save(fname, content, data)
 
             elif mode == "3":
                 query   = input("  Artist name: ").strip()
@@ -242,9 +378,36 @@ def main():
                 data            = get_artist_data(artist["id"], include_singles=include_singles)
                 content         = format_artist(data)
                 print("\n" + content)
-                fname           = safe_filename(data["name"]) + "_artist.txt"
+                fname           = safe_filename(data["name"]) + "_artist"
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content)
+                    save(fname, content, data)
+
+            elif mode == "4":
+                query   = input("  Playlist search query: ").strip()
+                results = search_playlists(query)
+                if not results:
+                    print("  No playlists found."); continue
+                print()
+                playlist = choose_from_list(
+                    results,
+                    lambda p: f"{p['name']}  by {p['owner']['display_name'] or p['owner']['id']}  ({p['tracks']['total']} tracks)"
+                )
+                data    = get_playlist_data(playlist["id"])
+                content = format_playlist(data)
+                print("\n" + content)
+                fname   = safe_filename(data["name"]) + "_playlist"
+                if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
+                    save(fname, content, data)
+
+            elif mode == "5":
+                raw         = input("  Playlist URL or ID: ").strip()
+                playlist_id = extract_spotify_id(raw, "playlist")
+                data        = get_playlist_data(playlist_id)
+                content     = format_playlist(data)
+                print("\n" + content)
+                fname       = safe_filename(data["name"]) + "_playlist"
+                if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
+                    save(fname, content, data)
 
             again = pick("\n  Extract something else? y/n: ", ["y", "n"])
             if again == "n":
