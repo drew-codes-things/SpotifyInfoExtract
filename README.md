@@ -4,6 +4,9 @@ A Python command-line tool that extracts detailed info from Spotify and saves it
 
 Uses the [Spotipy](https://spotipy.readthedocs.io) library with Client Credentials flow — no user login required.
 
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 ---
 
 ## Setup
@@ -83,4 +86,4 @@ https://open.spotify.com/album/5Z9iiGl2FcIfa3BMiv6OIw
 
 ## License
 
-MIT
+MIT License
