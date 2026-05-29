@@ -259,6 +259,10 @@ MODES = {
     "5": "Playlist by URL/ID",
 }
 
+# Data types that support structured CSV/JSON export.
+# Artist mode uses top_tracks as rows for CSV, and the full dict for JSON.
+_STRUCTURED_TYPES = {"album", "playlist", "artist"}
+
 
 def pick(prompt, options):
     while True:
@@ -278,19 +282,28 @@ def choose_from_list(items, label_fn):
         print("  Invalid choice.")
 
 
-def ask_format():
-    """Ask the user which export format they want. Returns 'txt', 'csv', or 'json'."""
+def ask_format(data_type="album"):
+    """Ask which export format to use. For artist mode, warn that CSV uses top_tracks."""
     print("  Export format:")
     print("    1. txt (plain text)")
     print("    2. csv")
     print("    3. json")
+    if data_type == "artist":
+        print("  Note: CSV will export top tracks only. JSON exports all artist data.")
     choice = pick("  Choice: ", ["1", "2", "3"])
     return {"1": "txt", "2": "csv", "3": "json"}[choice]
 
 
-def save(base_name, content_txt, data_dict=None):
-    """Save content in the user-chosen format."""
-    fmt  = ask_format()
+def save(base_name, content_txt, data_dict=None, data_type="album"):
+    """Save content in the user-chosen format.
+
+    data_type is one of: 'album', 'playlist', 'artist'
+    For artist CSV, top_tracks is used as the row source.
+    For artist JSON, the full data_dict is written.
+    When CSV/JSON cannot be produced meaningfully, the user is asked before
+    falling back to txt so they can cancel.
+    """
+    fmt  = ask_format(data_type)
     ext  = fmt
     path = os.path.join(BASE_DIR, f"{base_name}.{ext}")
 
@@ -300,10 +313,25 @@ def save(base_name, content_txt, data_dict=None):
 
     elif fmt == "csv":
         if data_dict is None:
-            print("  CSV not available for this mode, saving as txt instead.")
+            # No structured data at all -- ask before falling back.
+            ans = pick("  CSV is not available for this export. Save as txt instead? y/n: ", ["y", "n"])
+            if ans == "n":
+                print("  Save cancelled.")
+                return
             path = os.path.join(BASE_DIR, f"{base_name}.txt")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content_txt)
+        elif data_type == "artist":
+            # Use top_tracks as the CSV rows for artist exports.
+            rows   = data_dict.get("top_tracks", [])
+            if not rows:
+                print("  No top tracks available to export as CSV.")
+                return
+            fields = list(rows[0].keys())
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(rows)
         else:
             rows   = data_dict.get("tracks", [])
             fields = list(rows[0].keys()) if rows else []
@@ -314,7 +342,11 @@ def save(base_name, content_txt, data_dict=None):
 
     elif fmt == "json":
         if data_dict is None:
-            print("  JSON not available for this mode, saving as txt instead.")
+            # No structured data -- ask before falling back.
+            ans = pick("  JSON is not available for this export. Save as txt instead? y/n: ", ["y", "n"])
+            if ans == "n":
+                print("  Save cancelled.")
+                return
             path = os.path.join(BASE_DIR, f"{base_name}.txt")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content_txt)
@@ -355,7 +387,7 @@ def main():
                 print("\n" + content)
                 fname   = safe_filename(f"{data['artists']} - {data['name']}")
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content, data)
+                    save(fname, content, data, data_type="album")
 
             elif mode == "2":
                 raw      = input("  Album URL or ID: ").strip()
@@ -365,7 +397,7 @@ def main():
                 print("\n" + content)
                 fname    = safe_filename(f"{data['artists']} - {data['name']}")
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content, data)
+                    save(fname, content, data, data_type="album")
 
             elif mode == "3":
                 query   = input("  Artist name: ").strip()
@@ -380,7 +412,7 @@ def main():
                 print("\n" + content)
                 fname           = safe_filename(data["name"]) + "_artist"
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content, data)
+                    save(fname, content, data, data_type="artist")
 
             elif mode == "4":
                 query   = input("  Playlist search query: ").strip()
@@ -397,7 +429,7 @@ def main():
                 print("\n" + content)
                 fname   = safe_filename(data["name"]) + "_playlist"
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content, data)
+                    save(fname, content, data, data_type="playlist")
 
             elif mode == "5":
                 raw         = input("  Playlist URL or ID: ").strip()
@@ -407,7 +439,7 @@ def main():
                 print("\n" + content)
                 fname       = safe_filename(data["name"]) + "_playlist"
                 if pick("\n  Save to file? y/n: ", ["y", "n"]) == "y":
-                    save(fname, content, data)
+                    save(fname, content, data, data_type="playlist")
 
             again = pick("\n  Extract something else? y/n: ", ["y", "n"])
             if again == "n":
