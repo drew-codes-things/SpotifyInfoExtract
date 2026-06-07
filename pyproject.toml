@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spotify-info-extract"
+version = "1.0.0"
+description = "Extract Spotify album, playlist and artist metadata."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = ["spotipy>=2.23.0", "python-dotenv>=1.0.0"]
+
+[project.scripts]
+spotify-info-extract = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
