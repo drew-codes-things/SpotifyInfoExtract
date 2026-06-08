@@ -5,3 +5,15 @@ __pycache__/
 *.csv
 *.json
 !requirements.txt
+
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+node_modules/
+.DS_Store
+*.log
+.env.*
+!.env.example
